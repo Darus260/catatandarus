@@ -1,74 +1,43 @@
-name: Build WebView APK (Hybrid)
+name: Build WebView APK (Pro Generator)
 
 on:
   workflow_dispatch:
     inputs:
-      appName:
-        description: 'Nama Aplikasi'
-        required: true
-      mode:
-        description: 'Mode Build (online / offline)'
-        required: true
-      webUrl:
-        description: 'URL Website (untuk mode online)'
-        required: false
-      feZipUrl:
-        description: 'URL ZIP Frontend (untuk mode offline)'
-        required: false
-      logoUrl:
-        description: 'URL Logo'
-        required: true
-      buildTag:
-        description: 'Tag Unik'
-        required: true
+      appName: { required: true, description: 'Nama Aplikasi' }
+      packageName: { required: true, description: 'Contoh: com.bisnis.anda' }
+      versionName: { required: true, default: '1.0' }
+      versionCode: { required: true, default: '1' }
+      rotation: { required: true, default: 'unspecified' } # portrait, landscape, unspecified
+      fullScreen: { required: true, default: 'false' }
+      hideTitleBar: { required: true, default: 'false' }
+      allowZoom: { required: true, default: 'true' }
+      pcMode: { required: true, default: 'false' }
+      swipeRefresh: { required: true, default: 'true' }
+      # ... tambahkan input lainnya sesuai kebutuhan ...
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write 
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Inject Configuration
+      - name: Inject Pro Configuration
         run: |
-          # 1. Setup ID Aplikasi (Package Name)
-          CLEAN_ID=$(echo "${{ github.event.inputs.appName }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g')
-          sed -i "s/applicationId \".*\"/applicationId \"com.$CLEAN_ID\"/g" app/build.gradle
-          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">${{ github.event.inputs.appName }}<\/string>/g' app/src/main/res/values/strings.xml
+          # 1. Update Gradle (Package, Version Code/Name)
+          sed -i "s/applicationId \".*\"/applicationId \"${{ github.event.inputs.packageName }}\"/g" app/build.gradle
+          sed -i "s/versionCode .*/versionCode ${{ github.event.inputs.versionCode }}/g" app/build.gradle
+          sed -i "s/versionName \".*\"/versionName \"${{ github.event.inputs.versionName }}\"/g" app/build.gradle
           
-          # 2. Logika Mode Offline/Online
-          if [ "${{ github.event.inputs.mode }}" == "offline" ]; then
-            echo "🔧 Memproses Mode Offline (ZIP Assets)..."
-            sed -i 's|private String targetUrl = ".*";|private String targetUrl = "file:///android_asset/index.html";|g' app/src/main/java/com/contoh/webview/MainActivity.java
-            mkdir -p app/src/main/assets
-            wget -O fe_assets.zip "${{ github.event.inputs.feZipUrl }}"
-            unzip fe_assets.zip -d app/src/main/assets/
-          else
-            echo "🌐 Memproses Mode Online (Web URL)..."
-            sed -i 's|private String targetUrl = ".*";|private String targetUrl = "${{ github.event.inputs.webUrl }}";|g' app/src/main/java/com/contoh/webview/MainActivity.java
-          fi
+          # 2. Update Strings (App Name)
+          sed -i "s|<string name=\"app_name\">.*</string>|<string name=\"app_name\">${{ github.event.inputs.appName }}</string>|g" app/src/main/res/values/strings.xml
+          
+          # 3. Update AndroidManifest (Rotation)
+          sed -i "s/android:screenOrientation=\".*\"/android:screenOrientation=\"${{ github.event.inputs.rotation }}\"/g" app/src/main/AndroidManifest.xml
 
-          # 3. Setup Logo
-          wget -O app_icon.png "${{ github.event.inputs.logoUrl }}"
-          # Catatan: Di sini idealnya ada skrip imagemagick untuk generate berbagai ukuran icon
+          # 4. Inject Boolean Settings ke MainActivity.java
+          sed -i "s/boolean isFullScreen = .*; \/\/ \[SET_FS\]/boolean isFullScreen = ${{ github.event.inputs.fullScreen }}; \/\/ \[SET_FS\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
+          sed -i "s/boolean hideTitle = .*; \/\/ \[SET_HT\]/boolean hideTitle = ${{ github.event.inputs.hideTitleBar }}; \/\/ \[SET_HT\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
+          sed -i "s/boolean pcMode = .*; \/\/ \[SET_PC\]/boolean pcMode = ${{ github.event.inputs.pcMode }}; \/\/ \[SET_PC\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-      
-      - name: Build APK
-        run: chmod +x gradlew && ./gradlew assembleDebug
-
-      - name: Create Release Assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.buildTag }}
-          name: Build ${{ github.event.inputs.appName }} - ${{ github.event.inputs.buildTag }}
-          files: app/build/outputs/apk/debug/app-debug.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # ... (Lanjutkan dengan Setup Java & Build seperti kode sebelumnya) ...
