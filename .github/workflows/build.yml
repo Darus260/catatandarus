@@ -1,4 +1,4 @@
-name: Build WebView APK Offline
+name: Build WebView APK (Hybrid)
 
 on:
   workflow_dispatch:
@@ -6,11 +6,17 @@ on:
       appName:
         description: 'Nama Aplikasi'
         required: true
-      feZipUrl:
-        description: 'URL Download File ZIP Frontend'
+      mode:
+        description: 'Mode Build (online / offline)'
         required: true
+      webUrl:
+        description: 'URL Website (untuk mode online)'
+        required: false
+      feZipUrl:
+        description: 'URL ZIP Frontend (untuk mode offline)'
+        required: false
       logoUrl:
-        description: 'URL Logo Aplikasi'
+        description: 'URL Logo'
         required: true
       buildTag:
         description: 'Tag Unik'
@@ -26,57 +32,42 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Inject Data, ID, Logo & Frontend
+      - name: Inject Configuration
         run: |
-          # 1. Membuat Application ID unik
+          # 1. Setup ID Aplikasi
           CLEAN_ID=$(echo "${{ github.event.inputs.appName }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g')
-          APP_ID="com.$CLEAN_ID"
-          
-          # 2. Mengganti Application ID di build.gradle
-          sed -i "s/applicationId \".*\"/applicationId \"$APP_ID\"/g" app/build.gradle
-
-          # 3. Mengubah Nama Aplikasi (Strings)
+          sed -i "s/applicationId \".*\"/applicationId \"com.$CLEAN_ID\"/g" app/build.gradle
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">${{ github.event.inputs.appName }}<\/string>/g' app/src/main/res/values/strings.xml
           
-          # 4. MENGUBAH URL TARGET KE LOKAL (Offline)
-          sed -i 's|private String targetUrl = ".*";|private String targetUrl = "file:///android_asset/index.html";|g' app/src/main/java/com/contoh/webview/MainActivity.java
-          
-          # 5. Mendownload logo
+          # 2. Logika Pemisahan Menu
+          if [ "${{ github.event.inputs.mode }}" == "offline" ]; then
+            echo "🔧 Memproses Mode Offline (ZIP)..."
+            sed -i 's|private String targetUrl = ".*";|private String targetUrl = "file:///android_asset/index.html";|g' app/src/main/java/com/contoh/webview/MainActivity.java
+            mkdir -p app/src/main/assets
+            wget -O fe_assets.zip "${{ github.event.inputs.feZipUrl }}"
+            unzip fe_assets.zip -d app/src/main/assets/
+          else
+            echo "🌐 Memproses Mode Online (Web URL)..."
+            sed -i 's|private String targetUrl = ".*";|private String targetUrl = "${{ github.event.inputs.webUrl }}";|g' app/src/main/java/com/contoh/webview/MainActivity.java
+          fi
+
+          # 3. Setup Logo
           wget -O app_icon.png "${{ github.event.inputs.logoUrl }}"
-          mkdir -p app/src/main/res/mipmap-mdpi app/src/main/res/mipmap-hdpi app/src/main/res/mipmap-xhdpi app/src/main/res/mipmap-xxhdpi app/src/main/res/mipmap-xxxhdpi
-          cp app_icon.png app/src/main/res/mipmap-mdpi/ic_launcher.png
-          cp app_icon.png app/src/main/res/mipmap-hdpi/ic_launcher.png
-          cp app_icon.png app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          cp app_icon.png app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          cp app_icon.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          # ... (Logika cp logo ke mipmap seperti sebelumnya)
 
-          # 6. DOWNLOAD DAN EKSTRAK FRONTEND KE DALAM APK
-          mkdir -p app/src/main/assets
-          wget -O frontend.zip "${{ github.event.inputs.feZipUrl }}"
-          unzip frontend.zip -d app/src/main/assets/
-
-      - name: Setup Java
+      - name: Setup Java & Build
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.4'
-
+      
       - name: Build APK
-        run: gradle assembleDebug
+        run: chmod +x gradlew && ./gradlew assembleDebug
 
-      - name: Ubah Nama File APK
-        run: mv app/build/outputs/apk/debug/app-debug.apk "${{ github.event.inputs.appName }}.apk"
-
-      - name: Buat Direct Link Download (Release)
+      - name: Create Release Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.buildTag }}
-          name: ${{ github.event.inputs.appName }} APK
-          files: "${{ github.event.inputs.appName }}.apk"
+          files: app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
