@@ -34,14 +34,14 @@ jobs:
 
       - name: Inject Configuration
         run: |
-          # 1. Setup ID Aplikasi
+          # 1. Setup ID Aplikasi (Package Name)
           CLEAN_ID=$(echo "${{ github.event.inputs.appName }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g')
           sed -i "s/applicationId \".*\"/applicationId \"com.$CLEAN_ID\"/g" app/build.gradle
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">${{ github.event.inputs.appName }}<\/string>/g' app/src/main/res/values/strings.xml
           
-          # 2. Logika Pemisahan Menu
+          # 2. Logika Mode Offline/Online
           if [ "${{ github.event.inputs.mode }}" == "offline" ]; then
-            echo "🔧 Memproses Mode Offline (ZIP)..."
+            echo "🔧 Memproses Mode Offline (ZIP Assets)..."
             sed -i 's|private String targetUrl = ".*";|private String targetUrl = "file:///android_asset/index.html";|g' app/src/main/java/com/contoh/webview/MainActivity.java
             mkdir -p app/src/main/assets
             wget -O fe_assets.zip "${{ github.event.inputs.feZipUrl }}"
@@ -53,9 +53,9 @@ jobs:
 
           # 3. Setup Logo
           wget -O app_icon.png "${{ github.event.inputs.logoUrl }}"
-          # ... (Logika cp logo ke mipmap seperti sebelumnya)
+          # Catatan: Di sini idealnya ada skrip imagemagick untuk generate berbagai ukuran icon
 
-      - name: Setup Java & Build
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -68,6 +68,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.buildTag }}
+          name: Build ${{ github.event.inputs.appName }} - ${{ github.event.inputs.buildTag }}
           files: app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
