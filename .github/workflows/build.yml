@@ -1,0 +1,76 @@
+name: Build WebView APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      appName:
+        description: 'Nama Aplikasi'
+        required: true
+      webUrl:
+        description: 'URL Website'
+        required: true
+      logoUrl:
+        description: 'URL Logo Aplikasi'
+        required: true
+      buildTag:
+        description: 'Tag Unik'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Inject Data, ID & Logo
+        run: |
+          # 1. Membuat Application ID unik
+          CLEAN_ID=$(echo "${{ github.event.inputs.appName }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g')
+          APP_ID="com.$CLEAN_ID"
+          
+          # 2. Mengganti Application ID di build.gradle
+          sed -i "s/applicationId \".*\"/applicationId \"$APP_ID\"/g" app/build.gradle
+
+          # 3. Mengubah Nama Aplikasi (Strings) dan URL Target (Java)
+          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">${{ github.event.inputs.appName }}<\/string>/g' app/src/main/res/values/strings.xml
+          sed -i 's|private String targetUrl = ".*";|private String targetUrl = "${{ github.event.inputs.webUrl }}";|g' app/src/main/java/com/contoh/webview/MainActivity.java
+          
+          # 4. Mendownload logo
+          wget -O app_icon.png "${{ github.event.inputs.logoUrl }}"
+          mkdir -p app/src/main/res/mipmap-mdpi app/src/main/res/mipmap-hdpi app/src/main/res/mipmap-xhdpi app/src/main/res/mipmap-xxhdpi app/src/main/res/mipmap-xxxhdpi
+          cp app_icon.png app/src/main/res/mipmap-mdpi/ic_launcher.png
+          cp app_icon.png app/src/main/res/mipmap-hdpi/ic_launcher.png
+          cp app_icon.png app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          cp app_icon.png app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          cp app_icon.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+
+      - name: Build APK
+        run: gradle assembleDebug
+
+      # PERUBAHAN: Kembali menggunakan nama aplikasi untuk nama file
+      - name: Ubah Nama File APK
+        run: mv app/build/outputs/apk/debug/app-debug.apk "${{ github.event.inputs.appName }}.apk"
+
+      - name: Buat Direct Link Download (Release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.buildTag }}
+          name: ${{ github.event.inputs.appName }} APK
+          files: "${{ github.event.inputs.appName }}.apk"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

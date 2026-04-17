@@ -1,0 +1,46 @@
+name: Build WebView APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      appName:
+        description: 'Nama Aplikasi'
+        required: true
+      webUrl:
+        description: 'URL Website'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Murni otomasi: Script ini akan mencari dan mengganti nama aplikasi serta URL di source code
+      - name: Inject Data dari GAS ke Source Code
+        run: |
+          # 1. Mengganti Nama Aplikasi di file strings.xml
+          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">${{ github.event.inputs.appName }}<\/string>/g' app/src/main/res/values/strings.xml
+          
+          # 2. Mengganti URL target di file MainActivity.java
+          # Pastikan path folder 'com/contoh/webview' di bawah ini disesuaikan dengan folder package Anda di GitHub
+          sed -i 's|private String targetUrl = ".*";|private String targetUrl = "${{ github.event.inputs.webUrl }}";|g' app/src/main/java/com/contoh/webview/MainActivity.java
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Berikan Izin Eksekusi pada Gradle
+        run: chmod +x ./gradlew
+
+      - name: Build APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK Hasil Build
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ github.event.inputs.appName }}-APK
+          path: app/build/outputs/apk/debug/app-debug.apk

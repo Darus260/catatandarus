@@ -1,0 +1,38 @@
+name: Build WebView APK
+
+# Menerima perintah 'dispatch' (trigger) dari API (yakni dari GAS)
+on:
+  workflow_dispatch:
+    inputs:
+      appName:
+        description: 'Nama Aplikasi'
+        required: true
+      webUrl:
+        description: 'URL Website'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Di sini Anda bisa menambahkan script untuk mengubah file Android 
+      # (seperti mengubah string.xml untuk nama aplikasi, dan URL di MainActivity.java)
+      # menggunakan data dari inputs: ${{ github.event.inputs.appName }} dan ${{ github.event.inputs.webUrl }}
+      
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build APK (Assemble Debug)
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK ke GitHub
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-debug-${{ github.run_id }}
+          path: app/build/outputs/apk/debug/app-debug.apk
