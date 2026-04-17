@@ -3,41 +3,106 @@ name: Build WebView APK (Pro Generator)
 on:
   workflow_dispatch:
     inputs:
-      appName: { required: true, description: 'Nama Aplikasi' }
-      packageName: { required: true, description: 'Contoh: com.bisnis.anda' }
-      versionName: { required: true, default: '1.0' }
-      versionCode: { required: true, default: '1' }
-      rotation: { required: true, default: 'unspecified' } # portrait, landscape, unspecified
-      fullScreen: { required: true, default: 'false' }
-      hideTitleBar: { required: true, default: 'false' }
-      allowZoom: { required: true, default: 'true' }
-      pcMode: { required: true, default: 'false' }
-      swipeRefresh: { required: true, default: 'true' }
-      # ... tambahkan input lainnya sesuai kebutuhan ...
+      appName:
+        description: 'Nama Aplikasi'
+        required: true
+      packageName:
+        description: 'Nama Paket (misal: com.app.saya)'
+        required: true
+      versionName:
+        description: 'Versi Nama (misal: 1.0)'
+        required: true
+      versionCode:
+        description: 'Versi Kode (misal: 1)'
+        required: true
+      rotation:
+        description: 'Rotasi Layar (unspecified, portrait, landscape)'
+        required: true
+      fullScreen:
+        description: 'Full Screen (true/false)'
+        required: true
+      hideTitleBar:
+        description: 'Hide Title Bar (true/false)'
+        required: true
+      allowLongPress:
+        description: 'Allow Long Press (true/false)'
+        required: true
+      allowZoomUI:
+        description: 'Allow Zoom UI (true/false)'
+        required: true
+      pcMode:
+        description: 'PC Mode (true/false)'
+        required: true
+      mediaAutoPlay:
+        description: 'Media Auto Play (true/false)'
+        required: true
+      allowCamera:
+        description: 'Allow Camera (true/false)'
+        required: true
+      allowMicrophone:
+        description: 'Allow Microphone (true/false)'
+        required: true
+      feZipUrl:
+        description: 'URL Download ZIP Frontend'
+        required: true
+      buildTag:
+        description: 'Tag Rilis Unik'
+        required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Inject Pro Configuration
+      - name: Inject Pro Configuration (Sed Magic)
         run: |
-          # 1. Update Gradle (Package, Version Code/Name)
+          echo "🔧 Memulai Injeksi Konfigurasi..."
+
+          # 1. Update app/build.gradle (Paket dan Versi)
           sed -i "s/applicationId \".*\"/applicationId \"${{ github.event.inputs.packageName }}\"/g" app/build.gradle
           sed -i "s/versionCode .*/versionCode ${{ github.event.inputs.versionCode }}/g" app/build.gradle
           sed -i "s/versionName \".*\"/versionName \"${{ github.event.inputs.versionName }}\"/g" app/build.gradle
           
-          # 2. Update Strings (App Name)
+          # 2. Update Nama Aplikasi di strings.xml
           sed -i "s|<string name=\"app_name\">.*</string>|<string name=\"app_name\">${{ github.event.inputs.appName }}</string>|g" app/src/main/res/values/strings.xml
           
-          # 3. Update AndroidManifest (Rotation)
+          # 3. Update Rotasi Layar di AndroidManifest.xml
           sed -i "s/android:screenOrientation=\".*\"/android:screenOrientation=\"${{ github.event.inputs.rotation }}\"/g" app/src/main/AndroidManifest.xml
 
-          # 4. Inject Boolean Settings ke MainActivity.java
+          # 4. Inject Pengaturan Boolean ke MainActivity.java
           sed -i "s/boolean isFullScreen = .*; \/\/ \[SET_FS\]/boolean isFullScreen = ${{ github.event.inputs.fullScreen }}; \/\/ \[SET_FS\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
-          sed -i "s/boolean hideTitle = .*; \/\/ \[SET_HT\]/boolean hideTitle = ${{ github.event.inputs.hideTitleBar }}; \/\/ \[SET_HT\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
+          sed -i "s/boolean hideTitleBar = .*; \/\/ \[SET_HT\]/boolean hideTitleBar = ${{ github.event.inputs.hideTitleBar }}; \/\/ \[SET_HT\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
+          sed -i "s/boolean allowLongPress = .*; \/\/ \[SET_LP\]/boolean allowLongPress = ${{ github.event.inputs.allowLongPress }}; \/\/ \[SET_LP\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
+          sed -i "s/boolean allowZoomUI = .*; \/\/ \[SET_ZOOM\]/boolean allowZoomUI = ${{ github.event.inputs.allowZoomUI }}; \/\/ \[SET_ZOOM\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
           sed -i "s/boolean pcMode = .*; \/\/ \[SET_PC\]/boolean pcMode = ${{ github.event.inputs.pcMode }}; \/\/ \[SET_PC\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
+          sed -i "s/boolean mediaAutoPlay = .*; \/\/ \[SET_MEDIA\]/boolean mediaAutoPlay = ${{ github.event.inputs.mediaAutoPlay }}; \/\/ \[SET_MEDIA\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
+          sed -i "s/boolean allowCamera = .*; \/\/ \[SET_CAM\]/boolean allowCamera = ${{ github.event.inputs.allowCamera }}; \/\/ \[SET_CAM\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
+          sed -i "s/boolean allowMicrophone = .*; \/\/ \[SET_MIC\]/boolean allowMicrophone = ${{ github.event.inputs.allowMicrophone }}; \/\/ \[SET_MIC\]/g" app/src/main/java/com/contoh/webview/MainActivity.java
 
-      # ... (Lanjutkan dengan Setup Java & Build seperti kode sebelumnya) ...
+          # 5. Siapkan Assets Frontend Offline
+          mkdir -p app/src/main/assets
+          wget -O fe_assets.zip "${{ github.event.inputs.feZipUrl }}"
+          unzip fe_assets.zip -d app/src/main/assets/
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Build APK (Assemble Debug)
+        run: chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Create Release and Upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.buildTag }}
+          name: Build ${{ github.event.inputs.appName }} - ${{ github.event.inputs.buildTag }}
+          files: app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
